@@ -12,8 +12,46 @@ import os
 import sys
 import json
 import math
+import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from flask import Flask, request, jsonify, Response
+
+# ---------------------------------------------------------------------------
+# Daily LinkedIn-hit cap (resets midnight UTC)
+# Counts each /scrape (1 hit) and each /score that lazy-fetches a JD (1 hit).
+# In-memory only — resets on service restart. Fine for free Render tier.
+# ---------------------------------------------------------------------------
+LINKEDIN_DAILY_CAP = int(os.environ.get("LINKEDIN_DAILY_CAP", "40"))
+_cap_lock = threading.Lock()
+_cap_state = {"day": "", "hits": 0}
+
+
+def _today_utc() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _check_and_reserve_hit() -> tuple[bool, int]:
+    """Try to reserve 1 LinkedIn hit. Returns (allowed, hits_used_after_reserve)."""
+    with _cap_lock:
+        today = _today_utc()
+        if _cap_state["day"] != today:
+            _cap_state["day"] = today
+            _cap_state["hits"] = 0
+        if _cap_state["hits"] >= LINKEDIN_DAILY_CAP:
+            return (False, _cap_state["hits"])
+        _cap_state["hits"] += 1
+        return (True, _cap_state["hits"])
+
+
+def _cap_status() -> dict:
+    with _cap_lock:
+        return {
+            "day": _cap_state["day"] or _today_utc(),
+            "used": _cap_state["hits"],
+            "cap": LINKEDIN_DAILY_CAP,
+            "remaining": max(0, LINKEDIN_DAILY_CAP - _cap_state["hits"]),
+        }
 
 try:
     from jobspy import scrape_jobs
@@ -141,6 +179,15 @@ def scrape():
     if not search_term:
         search_term = "*"
 
+    # Reserve a LinkedIn daily-hit budget slot (if LinkedIn is in the sites list)
+    if "linkedin" in sites:
+        allowed, used = _check_and_reserve_hit()
+        if not allowed:
+            return jsonify({
+                "error": f"Daily LinkedIn hit cap reached ({LINKEDIN_DAILY_CAP}). Resets midnight UTC.",
+                "cap": _cap_status(),
+            }), 429
+
     # Company filter is applied post-scrape, NOT appended to search_term
     # (LinkedIn returns 0 results when company name is in the query)
     if company_filter and not linkedin_company_id:
@@ -240,7 +287,13 @@ def scrape():
         "jobs": jobs,
         "filtered_out": filtered_out,
         "resolved_linkedin_company_id": linkedin_company_id if resolved_from_name else "",
+        "cap": _cap_status(),
     })
+
+
+@app.route("/limits")
+def limits():
+    return jsonify(_cap_status())
 
 
 @app.route("/score", methods=["POST"])
@@ -255,12 +308,16 @@ def score():
     if not title and not description:
         return jsonify({"error": "title or description required"}), 400
 
-    # Lazy-fetch full JD from LinkedIn if not already provided
+    # Lazy-fetch full JD from LinkedIn if not already provided (gated by daily cap)
     jd_source = "title-only"
     if not description and "linkedin.com" in job_url:
-        description = _fetch_linkedin_jd(job_url)
-        if description:
-            jd_source = "fetched"
+        allowed, _ = _check_and_reserve_hit()
+        if allowed:
+            description = _fetch_linkedin_jd(job_url)
+            if description:
+                jd_source = "fetched"
+        else:
+            jd_source = "cap-reached"
 
     jd_text = f"Title: {title}\nCompany: {company}\nLocation: {location}\n\n{description or '(No description available — score from title + company + location only.)'}"
     try:
