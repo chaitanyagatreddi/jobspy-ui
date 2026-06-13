@@ -234,10 +234,34 @@ def scrape():
     if linkedin_company_id and linkedin_company_id.isdigit():
         scrape_kwargs["linkedin_company_ids"] = [int(linkedin_company_id)]
 
+    site_errors: dict[str, str] = {}
+    df = None
     try:
         df = scrape_jobs(**scrape_kwargs)
     except Exception as e:
-        return jsonify({"error": f"jobspy failed: {e}"}), 500
+        # The batch call failed (e.g. one site like Google returns 429).
+        # Retry each site in isolation and merge what survives.
+        import pandas as pd
+        frames = []
+        for site in sites:
+            try:
+                solo_kwargs = {**scrape_kwargs, "site_name": [site]}
+                solo_df = scrape_jobs(**solo_kwargs)
+                if solo_df is not None and not solo_df.empty:
+                    frames.append(solo_df)
+            except Exception as sub_e:
+                msg = str(sub_e)
+                # Trim the verbose Google /sorry URL noise
+                if "/sorry/index" in msg:
+                    msg = "rate-limited by Google (shared IP — try LinkedIn/Indeed)"
+                site_errors[site] = msg[:240]
+        if frames:
+            df = pd.concat(frames, ignore_index=True)
+        else:
+            return jsonify({
+                "error": "all selected sites failed",
+                "site_errors": site_errors,
+            }), 502
 
     # DataFrame → JSON-safe list of dicts + dedupe + location filter
     seen = set()
@@ -288,6 +312,7 @@ def scrape():
         "filtered_out": filtered_out,
         "resolved_linkedin_company_id": linkedin_company_id if resolved_from_name else "",
         "cap": _cap_status(),
+        "site_errors": site_errors,
     })
 
 
@@ -517,13 +542,14 @@ HTML = """<!DOCTYPE html>
   </div>
   <div class="chips" id="sites">
     <div class="chip active" data-site="linkedin">LinkedIn</div>
-    <div class="chip active" data-site="google">Google</div>
     <div class="chip" data-site="indeed">Indeed</div>
+    <div class="chip" data-site="google" title="Often rate-limited on shared IPs">Google ⚠</div>
     <div class="chip" data-site="glassdoor">Glassdoor</div>
     <div class="chip" data-site="zip_recruiter">ZipRecruiter</div>
   </div>
 </section>
 
+<section class="results" id="noticeBar" style="padding-bottom:0"></section>
 <section class="results" id="results"></section>
 
 <footer>Powered by JobSpy · scored against <span style="color:var(--teal)">your profile</span></footer>
@@ -648,7 +674,23 @@ $('#go').onclick = async () => {
       results.innerHTML = '';
       return;
     }
-    if (!r.ok) throw new Error(data.error || 'failed');
+    if (!r.ok) {
+      if (data.site_errors) {
+        const lines = Object.entries(data.site_errors)
+          .map(([s, m]) => `<div>• <b>${s}</b>: ${m}</div>`).join('');
+        throw new Error(`<div>${data.error || 'failed'}</div>${lines}`);
+      }
+      throw new Error(data.error || 'failed');
+    }
+    // Partial-success warning lives in its own bar above results so it isn't wiped
+    const noticeBar = document.getElementById('noticeBar');
+    if (data.site_errors && Object.keys(data.site_errors).length) {
+      const warned = Object.entries(data.site_errors)
+        .map(([s, m]) => `${s}: ${m}`).join(' · ');
+      noticeBar.innerHTML = `<div class="error" style="background:rgba(255,160,90,0.08);border-color:rgba(255,160,90,0.4);color:#ffc28a;">⚠ Partial: ${warned}</div>`;
+    } else {
+      noticeBar.innerHTML = '';
+    }
     renderJobs(data.jobs || []);
   } catch (e) {
     results.innerHTML = `<div class="error">${String(e.message || e)}</div>`;
