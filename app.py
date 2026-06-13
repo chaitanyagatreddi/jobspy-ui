@@ -543,6 +543,7 @@ HTML = """<!DOCTYPE html>
   <div class="chips" id="sites">
     <div class="chip active" data-site="linkedin">LinkedIn</div>
     <div class="chip" data-site="indeed">Indeed</div>
+    <div class="chip" data-site="naukri" title="May be CAPTCHA-blocked">Naukri ⚠</div>
     <div class="chip" data-site="glassdoor">Glassdoor</div>
     <div class="chip" data-site="zip_recruiter">ZipRecruiter</div>
   </div>
