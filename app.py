@@ -296,6 +296,34 @@ def limits():
     return jsonify(_cap_status())
 
 
+# ---- Email capture (lead gate) ---------------------------------------------
+_CAPTURES_PATH = Path(__file__).parent / "captures.csv"
+_capture_lock = threading.Lock()
+
+@app.route("/capture-email", methods=["POST"])
+def capture_email():
+    body = request.get_json(force=True, silent=True) or {}
+    email = (body.get("email") or "").strip()
+    company = (body.get("company") or "").strip()
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"error": "valid email required"}), 400
+    if not company:
+        return jsonify({"error": "company required"}), 400
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    ua = request.headers.get("User-Agent", "")[:200]
+    ts = datetime.now(timezone.utc).isoformat()
+    row = [ts, email, company, ip, ua]
+    with _capture_lock:
+        new_file = not _CAPTURES_PATH.exists()
+        with _CAPTURES_PATH.open("a", encoding="utf-8") as fh:
+            if new_file:
+                fh.write("timestamp,email,company,ip,user_agent\n")
+            # Trivial CSV escape
+            esc = lambda s: '"' + str(s).replace('"', '""') + '"'
+            fh.write(",".join(esc(c) for c in row) + "\n")
+    return jsonify({"ok": True})
+
+
 @app.route("/score", methods=["POST"])
 def score():
     """Score a single job against the profile. Lazy-fetches LinkedIn JD if missing."""
@@ -408,6 +436,19 @@ HTML = """<!DOCTYPE html>
 </head>
 <body>
 
+<!-- Email gate overlay -->
+<div id="emailGate" style="display:none;position:fixed;inset:0;background:rgba(1,1,1,0.92);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:#09070D;border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:32px;max-width:420px;width:100%;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,0.6);">
+    <div style="font-size:30px;margin-bottom:10px">🔎</div>
+    <h2 style="font-size:22px;font-weight:600;color:#fff;margin:0 0 8px;letter-spacing:-0.01em">job<span style="color:#50E3C2">.spy</span></h2>
+    <p style="color:#a0a0a0;font-size:14px;line-height:1.55;margin:0 0 22px">Find recent roles and score them against your profile. Quick intro before you start:</p>
+    <input type="email" id="gateEmail" placeholder="Work email" style="width:100%;padding:12px 14px;border-radius:10px;background:#010101;border:1px solid rgba(255,255,255,0.1);color:#fff;font:14px 'JetBrains Mono',monospace;margin-bottom:10px;outline:none;" />
+    <input type="text" id="gateCompany" placeholder="Company" style="width:100%;padding:12px 14px;border-radius:10px;background:#010101;border:1px solid rgba(255,255,255,0.1);color:#fff;font:14px 'JetBrains Mono',monospace;margin-bottom:14px;outline:none;" />
+    <button id="gateSubmit" style="width:100%;padding:13px;border-radius:10px;border:none;background:#625DF6;color:#fff;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 8px 24px rgba(98,93,246,0.3);">Get Access →</button>
+    <p id="gateError" style="color:#ff9b9b;font-size:12px;margin-top:10px;display:none">Please enter a valid email and company.</p>
+  </div>
+</div>
+
 <div id="capBanner" style="display:none;background:linear-gradient(90deg,rgba(255,160,90,0.15),rgba(98,93,246,0.12));border-bottom:1px solid rgba(255,160,90,0.4);color:#ffd9b8;padding:12px 24px;text-align:center;font-size:13px;font-weight:500;position:sticky;top:0;z-index:60;">
   <span id="capBannerText">Daily search cap reached — please come back tomorrow.</span>
   <span id="capBannerReset" style="color:#a0a0a0;font-weight:400;margin-left:8px"></span>
@@ -481,6 +522,39 @@ HTML = """<!DOCTYPE html>
 <script>
 const $ = s => document.querySelector(s);
 const results = $('#results');
+
+// ---- Email gate -------------------------------------------------------
+function showGate() { $('#emailGate').style.display = 'flex'; }
+function hideGate() { $('#emailGate').style.display = 'none'; }
+function gateValid(email, company) {
+  return /\S+@\S+\.\S+/.test(email) && company.trim().length >= 2;
+}
+async function submitGate() {
+  const email = $('#gateEmail').value.trim();
+  const company = $('#gateCompany').value.trim();
+  if (!gateValid(email, company)) {
+    $('#gateError').style.display = 'block';
+    return;
+  }
+  $('#gateError').style.display = 'none';
+  $('#gateSubmit').disabled = true; $('#gateSubmit').textContent = 'Saving…';
+  try {
+    await fetch('/capture-email', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email, company}),
+    });
+  } catch {}
+  localStorage.setItem('jobspy_gate_passed', '1');
+  localStorage.setItem('jobspy_gate_email', email);
+  hideGate();
+  $('#gateSubmit').disabled = false; $('#gateSubmit').textContent = 'Get Access →';
+}
+if (!localStorage.getItem('jobspy_gate_passed')) {
+  showGate();
+}
+$('#gateSubmit').onclick = submitGate;
+$('#gateEmail').addEventListener('keydown', e => { if (e.key === 'Enter') submitGate(); });
+$('#gateCompany').addEventListener('keydown', e => { if (e.key === 'Enter') submitGate(); });
 
 // ---- Cap banner -------------------------------------------------------
 function timeUntilMidnightUTC() {
