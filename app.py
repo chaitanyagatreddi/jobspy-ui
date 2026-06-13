@@ -436,17 +436,26 @@ HTML = """<!DOCTYPE html>
 </head>
 <body>
 
-<!-- Email gate overlay -->
+<!-- Email gate overlay (velt-style, copy ported from Gitradar) -->
 <div id="emailGate" style="display:none;position:fixed;inset:0;background:rgba(1,1,1,0.92);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center;padding:24px;">
-  <div style="background:#09070D;border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:32px;max-width:420px;width:100%;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,0.6);">
-    <div style="font-size:30px;margin-bottom:10px">🔎</div>
-    <h2 style="font-size:22px;font-weight:600;color:#fff;margin:0 0 8px;letter-spacing:-0.01em">job<span style="color:#50E3C2">.spy</span></h2>
-    <p style="color:#a0a0a0;font-size:14px;line-height:1.55;margin:0 0 22px">Find recent roles and score them against your profile. Quick intro before you start:</p>
-    <input type="email" id="gateEmail" placeholder="Work email" style="width:100%;padding:12px 14px;border-radius:10px;background:#010101;border:1px solid rgba(255,255,255,0.1);color:#fff;font:14px 'JetBrains Mono',monospace;margin-bottom:10px;outline:none;" />
-    <input type="text" id="gateCompany" placeholder="Company" style="width:100%;padding:12px 14px;border-radius:10px;background:#010101;border:1px solid rgba(255,255,255,0.1);color:#fff;font:14px 'JetBrains Mono',monospace;margin-bottom:14px;outline:none;" />
+  <div style="background:#09070D;border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:36px;max-width:440px;width:100%;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,0.6);">
+    <div style="font-size:32px;margin-bottom:12px">🔎</div>
+    <h2 style="font-size:24px;font-weight:600;color:#fff;margin:0 0 10px;letter-spacing:-0.015em">job<span style="color:#50E3C2">.spy</span></h2>
+    <p style="color:#a0a0a0;font-size:14px;line-height:1.6;margin:0 0 24px">
+      Used by job seekers, recruiters, and operators to find recent roles across LinkedIn, Indeed, Google &amp; Glassdoor — scored against your profile with a click.
+    </p>
+    <input type="email" id="gateEmail" placeholder="Work email" autocomplete="email" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;background:#010101;border:1px solid rgba(255,255,255,0.1);color:#fff;font:14px 'JetBrains Mono',monospace;margin-bottom:10px;outline:none;" />
+    <input type="text" id="gateCompany" placeholder="Company" autocomplete="organization" style="width:100%;box-sizing:border-box;padding:12px 14px;border-radius:10px;background:#010101;border:1px solid rgba(255,255,255,0.1);color:#fff;font:14px 'JetBrains Mono',monospace;margin-bottom:16px;outline:none;" />
     <button id="gateSubmit" style="width:100%;padding:13px;border-radius:10px;border:none;background:#625DF6;color:#fff;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 8px 24px rgba(98,93,246,0.3);">Get Access →</button>
     <p id="gateError" style="color:#ff9b9b;font-size:12px;margin-top:10px;display:none">Please enter a valid email and company.</p>
+    <p style="color:#666;font-size:11px;margin-top:14px;line-height:1.5">No spam. Just helps us understand who's using the tool.</p>
   </div>
+</div>
+
+<!-- Wake notice (Render free tier may need 30-60s on first hit) -->
+<div id="wakeNotice" style="display:none;background:rgba(255,160,90,0.08);border-bottom:1px solid rgba(255,160,90,0.3);padding:10px 24px;text-align:center;font-size:13px;color:#ffc28a;position:sticky;top:0;z-index:55;">
+  ⏳ This space runs on a free server — first request after idle may take <strong>30–60 seconds</strong> to wake up.
+  <button onclick="document.getElementById('wakeNotice').style.display='none'" style="margin-left:14px;background:none;border:none;color:#ffc28a;cursor:pointer;font-size:16px;line-height:1;">×</button>
 </div>
 
 <div id="capBanner" style="display:none;background:linear-gradient(90deg,rgba(255,160,90,0.15),rgba(98,93,246,0.12));border-bottom:1px solid rgba(255,160,90,0.4);color:#ffd9b8;padding:12px 24px;text-align:center;font-size:13px;font-weight:500;position:sticky;top:0;z-index:60;">
@@ -555,6 +564,13 @@ if (!localStorage.getItem('jobspy_gate_passed')) {
 $('#gateSubmit').onclick = submitGate;
 $('#gateEmail').addEventListener('keydown', e => { if (e.key === 'Enter') submitGate(); });
 $('#gateCompany').addEventListener('keydown', e => { if (e.key === 'Enter') submitGate(); });
+
+// Wake notice — show only on deployed (non-localhost) host
+if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  $('#wakeNotice').style.display = 'block';
+  // Auto-hide once they've performed at least one successful action
+  setTimeout(() => { $('#wakeNotice').style.display = 'none'; }, 30000);
+}
 
 // ---- Cap banner -------------------------------------------------------
 function timeUntilMidnightUTC() {
