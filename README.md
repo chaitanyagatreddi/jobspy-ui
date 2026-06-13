@@ -1,6 +1,6 @@
 # JobSpy UI
 
-Scrape recent job postings from LinkedIn, Google, Indeed, Glassdoor, and ZipRecruiter — then score each role against your own profile with `gpt-4o-mini`.
+Scrape recent job postings from LinkedIn, Indeed, Glassdoor, and ZipRecruiter — then score each role against your own profile with `gpt-4o-mini`.
 
 Lightweight Flask + vanilla JS frontend on top of [JobSpy](https://github.com/speedyapply/JobSpy).
 

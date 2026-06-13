@@ -500,7 +500,7 @@ HTML = """<!DOCTYPE html>
 
 <section class="hero">
   <h1>Recent roles, <span>scored</span> against your profile.</h1>
-  <p>Scrape LinkedIn, Indeed, Google, Glassdoor concurrently. Filter by age. Rank by fit.</p>
+  <p>Scrape LinkedIn, Indeed, Glassdoor concurrently. Filter by age. Rank by fit.</p>
 </section>
 
 <section class="form">
@@ -543,7 +543,6 @@ HTML = """<!DOCTYPE html>
   <div class="chips" id="sites">
     <div class="chip active" data-site="linkedin">LinkedIn</div>
     <div class="chip" data-site="indeed">Indeed</div>
-    <div class="chip" data-site="google" title="Often rate-limited on shared IPs">Google ⚠</div>
     <div class="chip" data-site="glassdoor">Glassdoor</div>
     <div class="chip" data-site="zip_recruiter">ZipRecruiter</div>
   </div>
