@@ -408,6 +408,10 @@ HTML = """<!DOCTYPE html>
 </head>
 <body>
 
+<div id="capBanner" style="display:none;background:linear-gradient(90deg,rgba(255,160,90,0.15),rgba(98,93,246,0.12));border-bottom:1px solid rgba(255,160,90,0.4);color:#ffd9b8;padding:12px 24px;text-align:center;font-size:13px;font-weight:500;position:sticky;top:0;z-index:60;">
+  <span id="capBannerText">Daily search cap reached — please come back tomorrow.</span>
+  <span id="capBannerReset" style="color:#a0a0a0;font-weight:400;margin-left:8px"></span>
+</div>
 <nav>
   <div class="brand">job<span>.spy</span> <span id="modeBadge" style="font-size:11px;color:var(--teal);background:rgba(80,227,194,0.1);padding:3px 8px;border-radius:999px;margin-left:8px;font-weight:500">personalized</span></div>
   <div style="display:flex;align-items:center;gap:14px;">
@@ -478,6 +482,33 @@ HTML = """<!DOCTYPE html>
 const $ = s => document.querySelector(s);
 const results = $('#results');
 
+// ---- Cap banner -------------------------------------------------------
+function timeUntilMidnightUTC() {
+  const now = new Date();
+  const t = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+  const ms = t - now;
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `Resets in ${h}h ${m}m (00:00 UTC)`;
+}
+function showCapBanner(cap) {
+  $('#capBanner').style.display = 'block';
+  $('#capBannerReset').textContent = timeUntilMidnightUTC();
+  $('#go').disabled = true;
+  $('#go').textContent = 'Cap reached';
+}
+function hideCapBanner() {
+  $('#capBanner').style.display = 'none';
+}
+async function checkCapOnLoad() {
+  try {
+    const r = await fetch('/limits');
+    const d = await r.json();
+    if (d.remaining === 0) showCapBanner(d);
+  } catch {}
+}
+checkCapOnLoad();
+
 // ---- Score toggle (persisted) ------------------------------------------
 function applyScoreMode() {
   const on = $('#scoreToggle').checked;
@@ -522,12 +553,19 @@ $('#go').onclick = async () => {
       })
     });
     const data = await r.json();
+    if (r.status === 429 && data.cap) {
+      showCapBanner(data.cap);
+      results.innerHTML = '';
+      return;
+    }
     if (!r.ok) throw new Error(data.error || 'failed');
     renderJobs(data.jobs || []);
   } catch (e) {
     results.innerHTML = `<div class="error">${String(e.message || e)}</div>`;
   } finally {
-    btn.disabled = false; btn.textContent = 'Find →';
+    if (!$('#capBanner').style.display || $('#capBanner').style.display === 'none') {
+      btn.disabled = false; btn.textContent = 'Find →';
+    }
   }
 };
 
