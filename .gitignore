@@ -1,0 +1,21 @@
+# Local config
+.env
+.env.*
+!.env.example
+profile_local.py
+
+# Logs and caches
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated data
+*.csv
+cloudsek_jd.txt
+
+# Editor / OS
+.vscode/
+.idea/
+.venv/
+venv/

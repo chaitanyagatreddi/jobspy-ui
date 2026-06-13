@@ -1,0 +1,4 @@
+flask>=3.0
+python-jobspy>=1.1
+openai>=1.30
+gunicorn>=21.2
