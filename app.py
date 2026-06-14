@@ -663,6 +663,20 @@ async function submitGate() {
   s.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
   document.head.appendChild(s);
 })();
+
+// Smooth integer counter (Motion-value style — animate 0 → target via onUpdate)
+function animateCount(el, target, opts) {
+  if (!el) return;
+  target = Number(target) || 0;
+  if (!window.M) { el.textContent = String(target) + (opts && opts.suffix || ''); return; }
+  const suffix = (opts && opts.suffix) || '';
+  const duration = (opts && opts.duration) || 0.8;
+  window.M.animate(0, target, {
+    duration,
+    easing: 'easeOut',
+    onUpdate: (v) => { el.textContent = Math.round(v) + suffix; },
+  });
+}
 if (!localStorage.getItem('jobspy_gate_passed')) {
   showGate();
 }
@@ -772,7 +786,7 @@ async function fetchJdOnly(idx, btn) {
       return;
     }
     cell.innerHTML = `
-      <div style="color:#50E3C2;font-size:11px;margin-bottom:6px">JD ${data.chars}ch</div>
+      <div style="color:#50E3C2;font-size:11px;margin-bottom:6px">JD <span id="jdch-${idx}">0</span>ch</div>
       <div style="padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.02);max-height:300px;overflow:auto;font-size:11px;line-height:1.5;color:#c8c8c8;white-space:pre-wrap">${safeJd}</div>
     `;
     if (window.M) {
@@ -781,6 +795,7 @@ async function fetchJdOnly(idx, btn) {
         { duration: 0.4, delay: window.M.stagger(0.05), easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
       );
     }
+    animateCount(document.getElementById(`jdch-${idx}`), data.chars, { duration: 0.7 });
     btn.dataset.locked = '1';
   } catch (e) {
     btn.textContent = 'Retry';
@@ -892,7 +907,7 @@ async function scoreJob(idx, btn) {
          <div id="jd-${idx}" style="display:none;opacity:0;margin-top:8px;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.02);max-height:300px;overflow:auto;font-size:11px;line-height:1.5;color:#c8c8c8;white-space:pre-wrap">${safeJd}</div></div>`
       : '';
     cell.innerHTML = `
-      <div style="font-weight:600;color:${verdictColor};font-size:13px">${data.score}/10 · ${data.verdict || '?'} ${sourceTag}</div>
+      <div style="font-weight:600;color:${verdictColor};font-size:13px"><span id="score-num-${idx}">0</span>/10 · ${data.verdict || '?'} ${sourceTag}</div>
       <div style="color:#a0a0a0;font-size:12px;margin-top:4px;line-height:1.4">${(data.fit_summary || '').slice(0, 200)}</div>
       ${data.outreach_hook ? `<div style="color:var(--teal);font-size:12px;margin-top:6px;font-style:italic">↳ ${data.outreach_hook}</div>` : ''}
       ${jdToggle}
@@ -903,6 +918,7 @@ async function scoreJob(idx, btn) {
         { duration: 0.4, delay: window.M.stagger(0.07), easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
       );
     }
+    animateCount(document.getElementById(`score-num-${idx}`), data.score, { duration: 0.9 });
   } catch (e) {
     btn.textContent = 'Retry';
     btn.disabled = false;
@@ -937,7 +953,7 @@ function renderJobs(jobs) {
       </tr>`;
   }).join('');
   results.innerHTML = `
-    <div style="color:#a0a0a0;font-size:13px;margin-bottom:12px;">${jobs.length} roles found (deduped)</div>
+    <div style="color:#a0a0a0;font-size:13px;margin-bottom:12px;"><span id="jobsCount">0</span> roles found (deduped)</div>
     <table>
       <thead><tr>
         <th>Title</th><th>Company</th><th>Location</th><th>Salary</th><th>Posted</th><th>Source</th><th class="score-col">Fit Score</th>
@@ -945,6 +961,7 @@ function renderJobs(jobs) {
       <tbody>${rows}</tbody>
     </table>`;
   applyScoreMode();  // honor toggle for newly-rendered rows
+  animateCount(document.getElementById('jobsCount'), jobs.length, { duration: 0.6 });
   // Motion: stagger row fade-in
   if (window.M) {
     const trs = results.querySelectorAll('tbody tr');
