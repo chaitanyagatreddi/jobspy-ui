@@ -507,7 +507,7 @@ HTML = """<!DOCTYPE html>
 </div>
 
 <div id="capBanner" style="display:none;background:linear-gradient(90deg,rgba(255,160,90,0.15),rgba(98,93,246,0.12));border-bottom:1px solid rgba(255,160,90,0.4);color:#ffd9b8;padding:12px 24px;text-align:center;font-size:13px;font-weight:500;position:sticky;top:0;z-index:60;">
-  <span id="capBannerText">Daily search cap reached — please come back tomorrow.</span>
+  <span id="capBannerText">Daily search cap reached — please come back in 24 hours.</span>
   <span id="capBannerReset" style="color:#a0a0a0;font-weight:400;margin-left:8px"></span>
 </div>
 <nav>
