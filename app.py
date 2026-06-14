@@ -765,7 +765,7 @@ function renderJobs(jobs) {
       : '—';
     return `
       <tr>
-        <td><a href="${j.job_url}" target="_blank">${j.title || '—'}</a></td>
+        <td><a href="${j.job_url}" target="_blank">${j.title || '—'}<span style="opacity:0.6;font-size:0.85em;margin-left:4px">↗</span></a></td>
         <td>${j.company || '—'}</td>
         <td>${j.location || j.city || '—'}</td>
         <td>${salary}</td>
