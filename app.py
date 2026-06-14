@@ -421,6 +421,13 @@ HTML = """<!DOCTYPE html>
 <meta charset="UTF-8" />
 <title>JobSpy · Recent Roles</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<script type="module">
+  // Motion One — vanilla animation library (formerly Framer Motion)
+  // Exposed on window.M so existing inline JS can call M.animate / M.stagger.
+  import { animate, stagger, inView, spring } from "https://cdn.jsdelivr.net/npm/motion@11.11.17/+esm";
+  window.M = { animate, stagger, inView, spring, ready: true };
+  window.dispatchEvent(new Event('motion-ready'));
+</script>
 <style>
   :root {
     --bg:#010101; --card:#09070D; --accent:#625DF6; --teal:#50E3C2; --muted:#888;
@@ -581,8 +588,26 @@ const $ = s => document.querySelector(s);
 const results = $('#results');
 
 // ---- Email gate -------------------------------------------------------
-function showGate() { $('#emailGate').style.display = 'flex'; }
-function hideGate() { $('#emailGate').style.display = 'none'; }
+function showGate() {
+  const g = $('#emailGate');
+  g.style.display = 'flex';
+  if (window.M) {
+    const card = g.querySelector('div');
+    window.M.animate(g, { opacity: [0, 1] }, { duration: 0.25 });
+    window.M.animate(card,
+      { opacity: [0, 1], transform: ['scale(0.94) translateY(8px)', 'scale(1) translateY(0)'] },
+      { duration: 0.35, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+    );
+  }
+}
+function hideGate() {
+  const g = $('#emailGate');
+  if (window.M) {
+    window.M.animate(g, { opacity: [1, 0] }, { duration: 0.2 }).then(() => g.style.display = 'none');
+  } else {
+    g.style.display = 'none';
+  }
+}
 function gateValid(email, company) {
   return /\S+@\S+\.\S+/.test(email) && company.trim().length >= 2;
 }
@@ -629,11 +654,40 @@ function timeUntilMidnightUTC() {
   const m = Math.floor((ms % 3600000) / 60000);
   return `Resets in ${h}h ${m}m (00:00 UTC)`;
 }
+function toggleJd(idx) {
+  const d = document.getElementById('jd-' + idx);
+  if (!d) return;
+  const opening = d.style.display === 'none' || d.style.display === '';
+  if (opening) {
+    d.style.display = 'block';
+    if (window.M) {
+      window.M.animate(d,
+        { opacity: [0, 1], transform: ['translateY(-4px)', 'translateY(0)'] },
+        { duration: 0.25, easing: 'ease-out' });
+    } else {
+      d.style.opacity = '1';
+    }
+  } else {
+    if (window.M) {
+      window.M.animate(d, { opacity: [1, 0] }, { duration: 0.2 }).then(() => d.style.display = 'none');
+    } else {
+      d.style.display = 'none';
+    }
+  }
+}
+
 function showCapBanner(cap) {
-  $('#capBanner').style.display = 'block';
+  const b = $('#capBanner');
+  b.style.display = 'block';
   $('#capBannerReset').textContent = timeUntilMidnightUTC();
   $('#go').disabled = true;
   $('#go').textContent = 'Cap reached';
+  if (window.M) {
+    window.M.animate(b,
+      { opacity: [0, 1], transform: ['translateY(-100%)', 'translateY(0)'] },
+      { duration: 0.4, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+    );
+  }
 }
 function hideCapBanner() {
   $('#capBanner').style.display = 'none';
@@ -689,6 +743,12 @@ async function fetchJdOnly(idx, btn) {
       <div style="color:#50E3C2;font-size:11px;margin-bottom:6px">JD ${data.chars}ch</div>
       <div style="padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.02);max-height:300px;overflow:auto;font-size:11px;line-height:1.5;color:#c8c8c8;white-space:pre-wrap">${safeJd}</div>
     `;
+    if (window.M) {
+      window.M.animate(cell.children,
+        { opacity: [0, 1], transform: ['translateY(6px)', 'translateY(0)'] },
+        { duration: 0.4, delay: window.M.stagger(0.05), easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+      );
+    }
     btn.dataset.locked = '1';
   } catch (e) {
     btn.textContent = 'Retry';
@@ -796,8 +856,8 @@ async function scoreJob(idx, btn) {
     const jdText = (data._jd_text || '').trim();
     const safeJd = jdText.replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const jdToggle = jdText
-      ? `<div style="margin-top:8px"><a href="#" onclick="event.preventDefault(); const d=document.getElementById('jd-${idx}'); d.style.display = d.style.display==='block' ? 'none' : 'block';" style="color:var(--accent);font-size:11px">View full JD ↓</a>
-         <div id="jd-${idx}" style="display:none;margin-top:8px;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.02);max-height:300px;overflow:auto;font-size:11px;line-height:1.5;color:#c8c8c8;white-space:pre-wrap">${safeJd}</div></div>`
+      ? `<div style="margin-top:8px"><a href="#" onclick="event.preventDefault(); toggleJd('${idx}');" style="color:var(--accent);font-size:11px">View full JD ↓</a>
+         <div id="jd-${idx}" style="display:none;opacity:0;margin-top:8px;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.02);max-height:300px;overflow:auto;font-size:11px;line-height:1.5;color:#c8c8c8;white-space:pre-wrap">${safeJd}</div></div>`
       : '';
     cell.innerHTML = `
       <div style="font-weight:600;color:${verdictColor};font-size:13px">${data.score}/10 · ${data.verdict || '?'} ${sourceTag}</div>
@@ -805,6 +865,12 @@ async function scoreJob(idx, btn) {
       ${data.outreach_hook ? `<div style="color:var(--teal);font-size:12px;margin-top:6px;font-style:italic">↳ ${data.outreach_hook}</div>` : ''}
       ${jdToggle}
     `;
+    if (window.M) {
+      window.M.animate(cell.children,
+        { opacity: [0, 1], transform: ['translateY(6px)', 'translateY(0)'] },
+        { duration: 0.4, delay: window.M.stagger(0.07), easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+      );
+    }
   } catch (e) {
     btn.textContent = 'Retry';
     btn.disabled = false;
@@ -847,6 +913,14 @@ function renderJobs(jobs) {
       <tbody>${rows}</tbody>
     </table>`;
   applyScoreMode();  // honor toggle for newly-rendered rows
+  // Motion: stagger row fade-in
+  if (window.M) {
+    const trs = results.querySelectorAll('tbody tr');
+    window.M.animate(trs,
+      { opacity: [0, 1], transform: ['translateY(8px)', 'translateY(0)'] },
+      { duration: 0.35, delay: window.M.stagger(0.04), easing: 'ease-out' }
+    );
+  }
 }
 </script>
 </body>
