@@ -321,6 +321,23 @@ def limits():
     return jsonify(_cap_status())
 
 
+@app.route("/fetch-jd", methods=["POST"])
+def fetch_jd():
+    """Fetch full JD description without scoring. Respects daily LinkedIn cap."""
+    body = request.get_json(force=True, silent=True) or {}
+    job_url = (body.get("job_url") or "").strip()
+    if "linkedin.com" not in job_url:
+        return jsonify({"error": "linkedin job_url required"}), 400
+    allowed, _ = _check_and_reserve_hit()
+    if not allowed:
+        return jsonify({
+            "error": f"Daily LinkedIn hit cap reached ({LINKEDIN_DAILY_CAP}). Resets midnight UTC.",
+            "cap": _cap_status(),
+        }), 429
+    desc = _fetch_linkedin_jd(job_url)
+    return jsonify({"description": desc, "chars": len(desc), "cap": _cap_status()})
+
+
 # ---- Email capture (lead gate) ---------------------------------------------
 _CAPTURES_PATH = Path(__file__).parent / "captures.csv"
 _capture_lock = threading.Lock()
@@ -628,14 +645,52 @@ checkCapOnLoad();
 function applyScoreMode() {
   const on = $('#scoreToggle').checked;
   $('#modeBadge').style.display = on ? '' : 'none';
-  document.querySelectorAll('.score-col, .score-cell').forEach(el => {
-    el.style.display = on ? '' : 'none';
+  // Column header swap
+  const colHeader = document.querySelector('.score-col');
+  if (colHeader) colHeader.textContent = on ? 'Fit Score' : 'JD';
+  // Per-row buttons swap label between Score → and View JD →
+  document.querySelectorAll('.action-btn').forEach(btn => {
+    if (!btn.dataset.locked) {  // only flip default-state buttons
+      btn.textContent = on ? 'Score →' : 'View JD →';
+      btn.onclick = (e) => (on ? scoreJob : fetchJdOnly)(+btn.dataset.idx, btn);
+    }
   });
   localStorage.setItem('jobspy_score_on', on ? '1' : '0');
 }
 const savedScoreMode = localStorage.getItem('jobspy_score_on');
 if (savedScoreMode === '0') $('#scoreToggle').checked = false;
 $('#scoreToggle').onchange = applyScoreMode;
+applyScoreMode();  // ensure column header + button labels reflect initial state
+
+async function fetchJdOnly(idx, btn) {
+  const j = window._jobs[idx];
+  btn.disabled = true; btn.textContent = 'Fetching…';
+  try {
+    const r = await fetch('/fetch-jd', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ job_url: j.job_url || '' }),
+    });
+    const data = await r.json();
+    if (r.status === 429 && data.cap) { showCapBanner(data.cap); return; }
+    if (!r.ok) throw new Error(data.error || 'fetch failed');
+    const cell = document.getElementById(`score-${idx}`);
+    const safeJd = (data.description || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    if (!safeJd) {
+      cell.innerHTML = `<div style="color:#888;font-size:12px">No JD available (LinkedIn login wall)</div>`;
+      return;
+    }
+    cell.innerHTML = `
+      <div style="color:#50E3C2;font-size:11px;margin-bottom:6px">JD ${data.chars}ch</div>
+      <div style="padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.02);max-height:300px;overflow:auto;font-size:11px;line-height:1.5;color:#c8c8c8;white-space:pre-wrap">${safeJd}</div>
+    `;
+    btn.dataset.locked = '1';
+  } catch (e) {
+    btn.textContent = 'Retry';
+    btn.disabled = false;
+    const cell = document.getElementById(`score-${idx}`);
+    cell.innerHTML = `<div style="color:#ff9b9b;font-size:12px">${e.message}</div>`;
+  }
+}
 
 document.querySelectorAll('.chip').forEach(c => {
   c.onclick = () => c.classList.toggle('active');
@@ -772,7 +827,7 @@ function renderJobs(jobs) {
         <td>${relTime(j.date_posted)}</td>
         <td><span class="site-badge">${j.site || '—'}</span></td>
         <td id="score-${idx}" class="score-cell">
-          <button class="score-btn" onclick="scoreJob(${idx}, this)">Score →</button>
+          <button class="score-btn action-btn" data-idx="${idx}">Score →</button>
         </td>
       </tr>`;
   }).join('');
