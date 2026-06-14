@@ -594,11 +594,30 @@ function showGate() {
   if (window.M) {
     const card = g.querySelector('div');
     window.M.animate(g, { opacity: [0, 1] }, { duration: 0.25 });
+    // Spring entrance — natural pop (per motion.dev/docs/react-transitions)
     window.M.animate(card,
-      { opacity: [0, 1], transform: ['scale(0.94) translateY(8px)', 'scale(1) translateY(0)'] },
-      { duration: 0.35, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+      { opacity: [0, 1], transform: ['scale(0.92) translateY(12px)', 'scale(1) translateY(0)'] },
+      { type: 'spring', bounce: 0.3, visualDuration: 0.4 }
     );
+    // Input focus glow
+    g.querySelectorAll('input').forEach(input => {
+      input.addEventListener('focus', () => {
+        window.M.animate(input, { boxShadow: '0 0 0 3px rgba(80,227,194,0.18)' }, { duration: 0.2 });
+      });
+      input.addEventListener('blur', () => {
+        window.M.animate(input, { boxShadow: '0 0 0 0px rgba(80,227,194,0)' }, { duration: 0.2 });
+      });
+    });
   }
+}
+
+function shakeGateCard() {
+  if (!window.M) return;
+  const card = $('#emailGate').querySelector('div');
+  window.M.animate(card,
+    { transform: ['translateX(0)', 'translateX(-8px)', 'translateX(8px)', 'translateX(-6px)', 'translateX(6px)', 'translateX(-3px)', 'translateX(3px)', 'translateX(0)'] },
+    { duration: 0.5, easing: 'linear' }
+  );
 }
 function hideGate() {
   const g = $('#emailGate');
@@ -616,10 +635,16 @@ async function submitGate() {
   const company = $('#gateCompany').value.trim();
   if (!gateValid(email, company)) {
     $('#gateError').style.display = 'block';
+    shakeGateCard();
     return;
   }
   $('#gateError').style.display = 'none';
-  $('#gateSubmit').disabled = true; $('#gateSubmit').textContent = 'Saving…';
+  const btn = $('#gateSubmit');
+  if (window.M) {
+    window.M.animate(btn, { transform: ['scale(1)', 'scale(0.96)', 'scale(1)'] }, { duration: 0.2 });
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px"></span>Saving…';
   try {
     await fetch('/capture-email', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -631,6 +656,13 @@ async function submitGate() {
   hideGate();
   $('#gateSubmit').disabled = false; $('#gateSubmit').textContent = 'Get Access →';
 }
+
+// Spinner keyframes for the submit button
+(function injectSpinKf() {
+  const s = document.createElement('style');
+  s.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+  document.head.appendChild(s);
+})();
 if (!localStorage.getItem('jobspy_gate_passed')) {
   showGate();
 }
