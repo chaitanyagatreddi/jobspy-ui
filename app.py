@@ -378,7 +378,15 @@ def score():
     if not title and not description:
         return jsonify({"error": "title or description required"}), 400
 
-    # Lazy-fetch full JD from LinkedIn if not already provided (gated by daily cap)
+    # Hard-stop scoring once the LinkedIn daily cap is exhausted
+    cap = _cap_status()
+    if cap["remaining"] <= 0:
+        return jsonify({
+            "error": f"Daily LinkedIn hit cap reached ({LINKEDIN_DAILY_CAP}). Resets midnight UTC.",
+            "cap": cap,
+        }), 429
+
+    # Lazy-fetch full JD from LinkedIn if not already provided (consumes 1 hit)
     jd_source = "title-only"
     if not description and "linkedin.com" in job_url:
         allowed, _ = _check_and_reserve_hit()
@@ -386,8 +394,6 @@ def score():
             description = _fetch_linkedin_jd(job_url)
             if description:
                 jd_source = "fetched"
-        else:
-            jd_source = "cap-reached"
 
     jd_text = f"Title: {title}\nCompany: {company}\nLocation: {location}\n\n{description or '(No description available — score from title + company + location only.)'}"
     try:
@@ -780,6 +786,7 @@ async function scoreJob(idx, btn) {
       })
     });
     const data = await r.json();
+    if (r.status === 429 && data.cap) { showCapBanner(data.cap); return; }
     if (!r.ok) throw new Error(data.error || 'score failed');
     const cell = document.getElementById(`score-${idx}`);
     const verdictColor = (data.verdict || '').toUpperCase() === 'APPLY' ? 'var(--teal)' : '#ff9b9b';
