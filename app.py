@@ -677,8 +677,15 @@ function animateCount(el, target, opts) {
     onUpdate: (v) => { el.textContent = Math.round(v) + suffix; },
   });
 }
+function whenMotionReady(cb) {
+  if (window.M && window.M.ready) { cb(); return; }
+  let fired = false;
+  const fire = () => { if (fired) return; fired = true; cb(); };
+  window.addEventListener('motion-ready', fire, { once: true });
+  setTimeout(fire, 600);  // fallback if CDN fails
+}
 if (!localStorage.getItem('jobspy_gate_passed')) {
-  showGate();
+  whenMotionReady(showGate);
 }
 $('#gateSubmit').onclick = submitGate;
 $('#gateEmail').addEventListener('keydown', e => { if (e.key === 'Enter') submitGate(); });
